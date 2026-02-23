@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESM2 Mutation Analyzer</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Protein Analyzer</h1>
+      <p>Test a mutation.</p>
+
+      <input type="text" id="seqInput" placeholder="Sequence" />
+      <input type="text" id="mutInput" placeholder="Mutation (e.g. P)" />
+      <input
+        type="number"
+        id="position"
+        min="1"
+        placeholder="Position of mutation"
+      />
+      <button onclick="runAnalysis()">Analyze</button>
+
+      <div id="resultBox" style="margin-top: 20px"></div>
+    </div>
+
+    <script>
+      async function runAnalysis() {
+        const seq = document.getElementById("seqInput").value.trim();
+        const mut = document.getElementById("mutInput").value.trim();
+        const pos = document.getElementById("position").value;
+        const resultBox = document.getElementById("resultBox");
+
+        // --- THE GUARDRAIL ---
+        if (!seq || !mut || !pos) {
+          resultBox.innerHTML =
+            "<p style='color:red;'>Please fill out all three fields.</p>";
+          return;
+        }
+
+        resultBox.innerHTML = "Thinking... (This takes a few seconds)";
+
+        try {
+          const response = await fetch(
+            `/api/predict?sequence=${seq}&position=${pos}&mutation=${mut}`,
+          );
+          const data = await response.json();
+
+          resultBox.innerHTML = `
+            <h3>Result:</h3>
+            <p><strong>Score:</strong> ${data.score.toFixed(4)}</p>
+            <p><strong>Verdict:</strong> ${data.verdict}</p>
+        `;
+        } catch (error) {
+          console.log(error);
+          resultBox.innerHTML =
+            "<p style='color:red;'>Error connecting to Python server.</p>";
+        }
+      }
+    </script>
+  </body>
+</html>
