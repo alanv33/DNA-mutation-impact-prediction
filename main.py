@@ -5,13 +5,11 @@ from transformers import AutoTokenizer, EsmForMaskedLM
 
 app = FastAPI()
 
-model_name = "facebook/esm2_t6_8M_UR50D"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = EsmForMaskedLM.from_pretrained(model_name)
-
 
 @app.get("/api/predict")
-def predict(sequence : str, position : int, mutation: str):
+def predict(sequence : str, position : int, mutation: str, model_name: str):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = EsmForMaskedLM.from_pretrained(model_name)
     
     # Tokenize the input
     inputs = tokenizer(sequence, return_tensors="pt")

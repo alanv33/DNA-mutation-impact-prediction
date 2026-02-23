@@ -32,4 +32,6 @@ body {
 .container button {
   padding: 10px 20px;
   cursor: pointer;
+  border: 1px solid #c5c5c5;
+  border-radius: 5px;
 }

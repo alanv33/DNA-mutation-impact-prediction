@@ -8,9 +8,16 @@
   </head>
   <body>
     <div class="container">
-      <h1>Protein Analyzer</h1>
-      <p>Test a mutation.</p>
-
+      <h1>Mutation Impact</h1>
+      <p>Test a mutation</p>
+      <label for="model"> Choose size of model: </label>
+      <select id="model" name="model"> 
+        <option value="facebook/esm2_t6_8M_UR50D"> 8 Million </option>
+        <option value="facebook/esm2_t12_35M_UR50D">  35 Million </option>
+        <option value="facebook/esm2_t33_650M_UR50D"> 650 Million </option>
+        <option value="facebook/esm2_t36_3B_UR50D"> 3 Billion </option>  
+      </select>
+      <p1> Note: A larger model size will improve accuracy but also increase processing time</p1>
       <input type="text" id="seqInput" placeholder="Sequence" />
       <input type="text" id="mutInput" placeholder="Mutation (e.g. P)" />
       <input
@@ -29,6 +36,7 @@
         const seq = document.getElementById("seqInput").value.trim();
         const mut = document.getElementById("mutInput").value.trim();
         const pos = document.getElementById("position").value;
+        const mod = document.getElementById("model").value;
         const resultBox = document.getElementById("resultBox");
 
         if (!seq || !mut || !pos) {
@@ -41,7 +49,7 @@
 
         try {
           const response = await fetch(
-            `/api/predict?sequence=${seq}&position=${pos}&mutation=${mut}`,
+            `/api/predict?sequence=${seq}&position=${pos}&mutation=${mut}&model_name=${mod}`,
           );
           const data = await response.json();
 
