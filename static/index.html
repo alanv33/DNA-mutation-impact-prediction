@@ -11,7 +11,7 @@
       <!-- Left Panel: Input -->
       <div class="container">
         <h1>Protein Analyzer</h1>
-        <p>Test a mutation.</p>
+        <p>Test a mutation</p>
         <label for="model"> Choose size of model: </label>
         <select id="model" name="model">
           <option value="facebook/esm2_t6_8M_UR50D">8 Million</option>
@@ -19,10 +19,10 @@
           <option value="facebook/esm2_t33_650M_UR50D">650 Million</option>
           <option value="facebook/esm2_t36_3B_UR50D">3 Billion</option>
         </select>
-        <p1>
+        <p style="font-size: 0.85em;">
           Note: A larger model size will improve accuracy but also increase
-          processing time</p1
-        >
+          processing time
+        </p>
         <input type="text" id="seqInput" placeholder="Sequence" />
         <input
           type="text"
@@ -67,6 +67,9 @@
         const pos = document.getElementById("position").value;
         const mod = document.getElementById("model").value;
         const resultBox = document.getElementById("resultBox");
+        const tablePanel = document.getElementById("tablePanel");
+
+        tablePanel.style.display="none";
 
         if (!seq || !mut || !pos) {
           resultBox.innerHTML =
@@ -97,6 +100,7 @@
       async function runAll() {
         const seq = document.getElementById("seqInput").value.trim();
         const pos = document.getElementById("position").value;
+        const mod = document.getElementById("model").value
         const resultBox = document.getElementById("resultBox");
         const tablePanel = document.getElementById("tablePanel");
 
@@ -111,7 +115,7 @@
 
         try {
           const response = await fetch(
-            `/api/predict-all?sequence=${seq}&position=${pos}`,
+            `/api/predict-all?sequence=${seq}&position=${pos}&model_name=${mod}`,
           );
           const data = await response.json();
 

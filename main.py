@@ -5,17 +5,20 @@ from transformers import AutoTokenizer, EsmForMaskedLM
 
 app = FastAPI()
 
-model_name = "facebook/esm2_t6_8M_UR50D"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = EsmForMaskedLM.from_pretrained(model_name)
+loaded_models = {}
 
 ALL_AMINO_ACIDS = list("ACDEFGHIKLMNPQRSTVWY")
 
+def load_esm_model(model_name: str):
+    if model_name not in loaded_models:
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = EsmForMaskedLM.from_pretrained(model_name)
+        loaded_models[model_name] = (tokenizer, model)
+    return loaded_models[model_name]
 
 @app.get("/api/predict")
 def predict(sequence : str, position : int, mutation: str, model_name: str):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = EsmForMaskedLM.from_pretrained(model_name)
+    tokenizer, model = load_esm_model(model_name)
     
     # Tokenize the input
     inputs = tokenizer(sequence, return_tensors="pt")
@@ -49,7 +52,8 @@ def predict(sequence : str, position : int, mutation: str, model_name: str):
 
 
 @app.get("/api/predict-all")
-def predict_all(sequence: str, position: int):
+def predict_all(sequence: str, position: int, model_name: str):
+    tokenizer, model = load_esm_model(model_name)
     inputs = tokenizer(sequence, return_tensors="pt")
     token_index_in_seq = position
 
