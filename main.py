@@ -9,46 +9,81 @@ model_name = "facebook/esm2_t6_8M_UR50D"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = EsmForMaskedLM.from_pretrained(model_name)
 
+ALL_AMINO_ACIDS = list("ACDEFGHIKLMNPQRSTVWY")
+
 
 @app.get("/api/predict")
-def predict(sequence : str, position : int, mutation: str):
-    
-    # Tokenize the input
+def predict(sequence: str, position: int, mutation: str):
+
     inputs = tokenizer(sequence, return_tensors="pt")
     token_index_in_seq = position
-    
-    # Get the wild-type token ID and mutant token ID
+
     wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
     mutant_id = tokenizer.convert_tokens_to_ids(mutation)
-    
-    # Pass through model 
+
     with torch.no_grad():
         outputs = model(**inputs)
         logits = outputs.logits
-        
-    # Extract logits for the specific position
+
     position_logits = logits[0, token_index_in_seq]
-    
-    # Calculate Log-Likelihood Ratio (LLR)
     log_probs = torch.nn.functional.log_softmax(position_logits, dim=0)
-    
+
     wildtype_log_prob = log_probs[wildtype_id].item()
     mutant_log_prob = log_probs[mutant_id].item()
-    
+
     score = mutant_log_prob - wildtype_log_prob
-    
-    verdict = ""
-    
+
     if score < -2.0:
         verdict = "Likely Damaging"
-    elif score  <= 0:
+    elif score <= 0:
         verdict = "Likely Benign"
     else:
         verdict = "Uncertain / Neutral"
-        
+
     print(verdict)
-    
+
     return {"score": score, "verdict": verdict}
+
+
+@app.get("/api/predict-all")
+def predict_all(sequence: str, position: int):
+    inputs = tokenizer(sequence, return_tensors="pt")
+    token_index_in_seq = position
+
+    wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
+    wildtype_token = tokenizer.convert_ids_to_tokens(wildtype_id)
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+    position_logits = logits[0, token_index_in_seq]
+    log_probs = torch.nn.functional.log_softmax(position_logits, dim=0)
+    wildtype_log_prob = log_probs[wildtype_id].item()
+
+    results = []
+    for aa in ALL_AMINO_ACIDS:
+        mutant_id = tokenizer.convert_tokens_to_ids(aa)
+        mutant_log_prob = log_probs[mutant_id].item()
+        score = mutant_log_prob - wildtype_log_prob
+
+        if score < -2.0:
+            verdict = "Likely Damaging"
+        elif score <= 0:
+            verdict = "Likely Benign"
+        else:
+            verdict = "Uncertain / Neutral"
+
+        results.append({
+            "mutation": aa,
+            "is_wildtype": aa == wildtype_token,
+            "score": score,
+            "verdict": verdict
+        })
+
+    # Sort best to worst score
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return {"wildtype": wildtype_token, "position": position, "results": results}
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
