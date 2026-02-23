@@ -8,7 +8,6 @@
   </head>
   <body>
     <div class="page-wrapper">
-      <!-- Left Panel: Input -->
       <div class="container">
         <h1>Protein Analyzer</h1>
         <p>Test a mutation</p>
@@ -20,21 +19,11 @@
           <option value="facebook/esm2_t36_3B_UR50D">3 Billion</option>
         </select>
         <p style="font-size: 0.85em;">
-          Note: A larger model size will improve accuracy but also increase
-          processing time
+          Note: A larger model size will improve accuracy but also increase processing time
         </p>
         <input type="text" id="seqInput" placeholder="Sequence" />
-        <input
-          type="text"
-          id="mutInput"
-          placeholder="Mutation (e.g. P) — ignored for ALL"
-        />
-        <input
-          type="number"
-          id="position"
-          min="1"
-          placeholder="Position of mutation"
-        />
+        <input type="text" id="mutInput" placeholder="Mutation (e.g. P) — ignored for ALL" />
+        <input type="number" id="position" min="1" placeholder="Position of mutation" />
 
         <div class="button-row">
           <button onclick="runAnalysis()">Analyze</button>
@@ -44,7 +33,6 @@
         <div id="resultBox" style="margin-top: 20px"></div>
       </div>
 
-      <!-- Right Panel: All Results Table (hidden until Analyze ALL is clicked) -->
       <div class="table-panel" id="tablePanel" style="display: none">
         <h2 id="tableTitle">All Mutations</h2>
         <table id="resultsTable">
@@ -69,11 +57,10 @@
         const resultBox = document.getElementById("resultBox");
         const tablePanel = document.getElementById("tablePanel");
 
-        tablePanel.style.display="none";
+        tablePanel.style.display = "none";
 
         if (!seq || !mut || !pos) {
-          resultBox.innerHTML =
-            "<p style='color:red;'>Please fill out all three fields.</p>";
+          resultBox.innerHTML = "<p style='color:red;'>Please fill out all three fields.</p>";
           return;
         }
 
@@ -81,8 +68,15 @@
 
         try {
           const response = await fetch(
-            `/api/predict?sequence=${seq}&position=${pos}&mutation=${mut}&model_name=${mod}`,
+            `/api/predict?sequence=${encodeURIComponent(seq)}&position=${pos}&mutation=${encodeURIComponent(mut)}&model_name=${encodeURIComponent(mod)}`
           );
+
+          if (!response.ok) {
+            const err = await response.json();
+            resultBox.innerHTML = `<p style='color:red;'>Server error: ${JSON.stringify(err.detail ?? err)}</p>`;
+            return;
+          }
+
           const data = await response.json();
 
           resultBox.innerHTML = `
@@ -91,22 +85,20 @@
             <p><strong>Verdict:</strong> ${data.verdict}</p>
           `;
         } catch (error) {
-          console.log(error);
-          resultBox.innerHTML =
-            "<p style='color:red;'>Error connecting to Python server.</p>";
+          console.error(error);
+          resultBox.innerHTML = "<p style='color:red;'>Error connecting to Python server.</p>";
         }
       }
 
       async function runAll() {
         const seq = document.getElementById("seqInput").value.trim();
         const pos = document.getElementById("position").value;
-        const mod = document.getElementById("model").value
+        const mod = document.getElementById("model").value;
         const resultBox = document.getElementById("resultBox");
         const tablePanel = document.getElementById("tablePanel");
 
         if (!seq || !pos) {
-          resultBox.innerHTML =
-            "<p style='color:red;'>Please enter a sequence and position.</p>";
+          resultBox.innerHTML = "<p style='color:red;'>Please enter a sequence and position.</p>";
           return;
         }
 
@@ -115,8 +107,15 @@
 
         try {
           const response = await fetch(
-            `/api/predict-all?sequence=${seq}&position=${pos}&model_name=${mod}`,
+            `/api/predict-all?sequence=${encodeURIComponent(seq)}&position=${pos}&model_name=${encodeURIComponent(mod)}`
           );
+
+          if (!response.ok) {
+            const err = await response.json();
+            resultBox.innerHTML = `<p style='color:red;'>Server error: ${JSON.stringify(err.detail ?? err)}</p>`;
+            return;
+          }
+
           const data = await response.json();
 
           resultBox.innerHTML = `
@@ -134,7 +133,6 @@
           for (const r of data.results) {
             const row = document.createElement("tr");
 
-            // Color-code rows by verdict
             if (r.is_wildtype) {
               row.classList.add("wt-row");
             } else if (r.verdict === "Likely Damaging") {
@@ -155,9 +153,8 @@
 
           tablePanel.style.display = "flex";
         } catch (error) {
-          console.log(error);
-          resultBox.innerHTML =
-            "<p style='color:red;'>Error connecting to Python server.</p>";
+          console.error(error);
+          resultBox.innerHTML = "<p style='color:red;'>Error connecting to Python server.</p>";
         }
       }
     </script>
