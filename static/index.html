@@ -27,8 +27,40 @@
         placeholder="Position of mutation"
       />
       <button onclick="runAnalysis()">Analyze</button>
+    <div class="page-wrapper">
 
-      <div id="resultBox" style="margin-top: 20px"></div>
+      <!-- Left Panel: Input -->
+      <div class="container">
+        <h1>Protein Analyzer</h1>
+        <p>Test a mutation.</p>
+
+        <input type="text" id="seqInput" placeholder="Sequence" />
+        <input type="text" id="mutInput" placeholder="Mutation (e.g. P) — ignored for ALL" />
+        <input type="number" id="position" min="1" placeholder="Position of mutation" />
+
+        <div class="button-row">
+          <button onclick="runAnalysis()">Analyze</button>
+          <button onclick="runAll()" class="btn-all">Analyze ALL</button>
+        </div>
+
+        <div id="resultBox" style="margin-top: 20px"></div>
+      </div>
+
+      <!-- Right Panel: All Results Table (hidden until Analyze ALL is clicked) -->
+      <div class="table-panel" id="tablePanel" style="display:none;">
+        <h2 id="tableTitle">All Mutations</h2>
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>Mutation</th>
+              <th>Score</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+
     </div>
 
     <script>
@@ -40,8 +72,7 @@
         const resultBox = document.getElementById("resultBox");
 
         if (!seq || !mut || !pos) {
-          resultBox.innerHTML =
-            "<p style='color:red;'>Please fill out all three fields.</p>";
+          resultBox.innerHTML = "<p style='color:red;'>Please fill out all three fields.</p>";
           return;
         }
 
@@ -57,11 +88,70 @@
             <h3>Result:</h3>
             <p><strong>Score:</strong> ${data.score.toFixed(4)}</p>
             <p><strong>Verdict:</strong> ${data.verdict}</p>
-        `;
+          `;
         } catch (error) {
           console.log(error);
-          resultBox.innerHTML =
-            "<p style='color:red;'>Error connecting to Python server.</p>";
+          resultBox.innerHTML = "<p style='color:red;'>Error connecting to Python server.</p>";
+        }
+      }
+
+      async function runAll() {
+        const seq = document.getElementById("seqInput").value.trim();
+        const pos = document.getElementById("position").value;
+        const resultBox = document.getElementById("resultBox");
+        const tablePanel = document.getElementById("tablePanel");
+
+        if (!seq || !pos) {
+          resultBox.innerHTML = "<p style='color:red;'>Please enter a sequence and position.</p>";
+          return;
+        }
+
+        resultBox.innerHTML = "Running all mutations... (may take a moment)";
+        tablePanel.style.display = "none";
+
+        try {
+          const response = await fetch(`/api/predict-all?sequence=${seq}&position=${pos}`);
+          const data = await response.json();
+
+          resultBox.innerHTML = `
+            <h3>Done!</h3>
+            <p>Wild-type at position ${data.position}: <strong>${data.wildtype}</strong></p>
+            <p>Showing all ${data.results.length} mutations →</p>
+          `;
+
+          document.getElementById("tableTitle").textContent =
+            `All Mutations at Position ${data.position} (WT: ${data.wildtype})`;
+
+          const tbody = document.getElementById("tableBody");
+          tbody.innerHTML = "";
+
+          for (const r of data.results) {
+            const row = document.createElement("tr");
+
+            // Color-code rows by verdict
+            if (r.is_wildtype) {
+              row.classList.add("wt-row");
+            } else if (r.verdict === "Likely Damaging") {
+              row.classList.add("damaging-row");
+            } else if (r.verdict === "Likely Benign") {
+              row.classList.add("benign-row");
+            } else {
+              row.classList.add("neutral-row");
+            }
+
+            row.innerHTML = `
+              <td>${r.mutation}${r.is_wildtype ? " ★" : ""}</td>
+              <td>${r.score.toFixed(4)}</td>
+              <td>${r.is_wildtype ? "Wild-Type" : r.verdict}</td>
+            `;
+            tbody.appendChild(row);
+          }
+
+          tablePanel.style.display = "flex";
+
+        } catch (error) {
+          console.log(error);
+          resultBox.innerHTML = "<p style='color:red;'>Error connecting to Python server.</p>";
         }
       }
     </script>
