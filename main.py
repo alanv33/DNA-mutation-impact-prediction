@@ -5,7 +5,6 @@ from transformers import AutoTokenizer, EsmForMaskedLM
 
 app = FastAPI()
 
-
 model_name = "facebook/esm2_t6_8M_UR50D"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = EsmForMaskedLM.from_pretrained(model_name)
@@ -41,11 +40,11 @@ def predict(sequence : str, position : int, mutation: str):
     verdict = ""
     
     if score < -2.0:
-        verdict = "Prediction: Likely Deleterious"
-    elif score > 0:
-        verdict = "Prediction: Likely Benign / Beneficial"
+        verdict = "Likely Damaging"
+    elif score  <= 0:
+        verdict = "Likely Benign"
     else:
-        verdict = "Prediction: Uncertain / Neutral"
+        verdict = "Uncertain / Neutral"
         
     print(verdict)
     
