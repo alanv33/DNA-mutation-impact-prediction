@@ -27,6 +27,9 @@ def predict(sequence : str, position : int, mutation: str, model_name: str):
     wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
     mutant_id = tokenizer.convert_tokens_to_ids(mutation)
 
+    # Masks the original input
+    inputs.input_ids[0, token_index_in_seq] = tokenizer.mask_token_id
+
     with torch.no_grad():
         outputs = model(**inputs)
         logits = outputs.logits
@@ -59,6 +62,9 @@ def predict_all(sequence: str, position: int, model_name: str):
 
     wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
     wildtype_token = tokenizer.convert_ids_to_tokens(wildtype_id)
+
+    # Masks the original character
+    inputs.input_ids[0, token_index_in_seq] = tokenizer.mask_token_id
 
     with torch.no_grad():
         outputs = model(**inputs)
