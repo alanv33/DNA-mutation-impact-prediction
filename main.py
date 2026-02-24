@@ -44,8 +44,8 @@ def predict(sequence : str, position : int, mutation: str, model_name: str):
 
     if score < -2.0:
         verdict = "Likely Damaging"
-    elif score <= 0:
-        verdict = "Likely Benign"
+    elif score > 0:
+        verdict = "Likely Benign / Beneficial"
     else:
         verdict = "Uncertain / Neutral"
 
@@ -82,8 +82,8 @@ def predict_all(sequence: str, position: int, model_name: str):
 
         if score < -2.0:
             verdict = "Likely Damaging"
-        elif score <= 0:
-            verdict = "Likely Benign"
+        elif score > 0:
+            verdict = "Likely Benign / Beneficial"
         else:
             verdict = "Uncertain / Neutral"
 
