@@ -7,132 +7,78 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-
-    <!-- ── NAV TABS ── -->
-    <div class="tab-bar">
-      <button class="tab active" onclick="switchTab('analyzerTab', this)">Mutation Analyzer</button>
-      <button class="tab" onclick="switchTab('scannerTab', this)">Sequence Scanner</button>
-    </div>
-
-    <div id="analyzerTab" class="tab-content">
-      <div class="page-wrapper">
-        <div class="container">
-          <h1>Protein Analyzer</h1>
-          <p>Test a mutation</p>
-          <label for="model">Choose size of model:</label>
-          <select id="model" name="model">
-            <option value="facebook/esm2_t6_8M_UR50D">8 Million</option>
-            <option value="facebook/esm2_t12_35M_UR50D">35 Million</option>
-            <option value="facebook/esm2_t33_650M_UR50D">650 Million</option>
-            <option value="facebook/esm2_t36_3B_UR50D">3 Billion</option>
-          </select>
-          <p style="font-size:0.85em;">Larger model = better accuracy but slower</p>
-          <input type="text" id="seqInput" placeholder="Sequence" />
-          <input type="text" id="mutInput" placeholder="Mutation (e.g. P) — ignored for ALL" />
-          <input type="number" id="position" min="1" placeholder="Position of mutation" />
-
-          <div class="button-row">
-            <button onclick="runAnalysis()">Analyze</button>
-            <button onclick="runAll()" class="btn-all">Analyze ALL</button>
-          </div>
-
-          <div id="resultBox" style="margin-top:20px"></div>
-        </div>
-
-        <div class="table-panel" id="tablePanel" style="display:none">
-          <h2 id="tableTitle">All Mutations</h2>
-          <table id="resultsTable">
-            <thead>
-              <tr><th>Mutation</th><th>Score</th><th>Verdict</th></tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div id="scannerTab" class="tab-content" style="display:none">
-      <div class="container scanner-container">
-        <h1>Sequence Scanner</h1>
-        <p>Identify which positions in the strand are crucial vs. flexible.</p>
-
-        <label for="scanModel">Choose size of model:</label>
-        <select id="scanModel">
+    <div class="page-wrapper">
+      <div class="container">
+        <h1>Protein Analyzer</h1>
+        <p>Test a mutation</p>
+        <label for="model"> Choose size of model: </label>
+        <select id="model" name="model">
           <option value="facebook/esm2_t6_8M_UR50D">8 Million</option>
           <option value="facebook/esm2_t12_35M_UR50D">35 Million</option>
           <option value="facebook/esm2_t33_650M_UR50D">650 Million</option>
           <option value="facebook/esm2_t36_3B_UR50D">3 Billion</option>
         </select>
-        <p style="font-size:0.85em;">Larger model = better accuracy but slower</p>
+        <p style="font-size: 0.85em;">
+          Note: A larger model size will improve accuracy but also increase processing time
+        </p>
+        <input type="text" id="seqInput" placeholder="Sequence" />
+        <input type="text" id="mutInput" placeholder="Mutation (e.g. P) — ignored for ALL" />
+        <input type="number" id="position" min="1" placeholder="Position of mutation" />
 
-        <input type="text" id="scanSeqInput" placeholder="Paste your full sequence here" style="width:90%" />
-        <button onclick="runScan()" class="btn-scan">Scan Full Sequence</button>
-
-        <div id="scanStatus" style="margin-top:14px;font-style:italic;color:#444;"></div>
-      </div>
-
-      <!-- Legend -->
-      <div id="legendBox" style="display:none" class="legend-box">
-        <strong>Crucialness Scale</strong>
-        <span class="legend-chip core">Core (0–3 replacements)</span>
-        <span class="legend-chip important">Important (4–8)</span>
-        <span class="legend-chip flexible">Flexible (9–14)</span>
-        <span class="legend-chip highly-flexible">Highly Flexible (15–19)</span>
-      </div>
-
-      <!-- Sequence map: colored AA boxes -->
-      <div id="seqMap" class="seq-map"></div>
-
-      <!-- Detail table shown on click -->
-      <div id="detailPanel" class="detail-panel" style="display:none">
-        <h3 id="detailTitle"></h3>
-        <div class="detail-cols">
-          <div>
-            <h4>✅ Tolerated Substitutions</h4>
-            <div id="detailTolerated" class="aa-chip-list"></div>
-          </div>
-          <div>
-            <h4>❌ Damaging Substitutions</h4>
-            <div id="detailDamaging" class="aa-chip-list"></div>
-          </div>
+        <div class="button-row">
+          <button onclick="runAnalysis()">Analyze</button>
+          <button onclick="runAll()" class="btn-all">Analyze ALL</button>
         </div>
+
+        <div id="resultBox" style="margin-top: 20px"></div>
+      </div>
+
+      <div class="table-panel" id="tablePanel" style="display: none">
+        <h2 id="tableTitle">All Mutations</h2>
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>Mutation</th>
+              <th>Score</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
       </div>
     </div>
 
     <script>
-      // ── Tab switching ──
-      function switchTab(tabId, btn) {
-        document.querySelectorAll(".tab-content").forEach(t => t.style.display = "none");
-        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-        document.getElementById(tabId).style.display = "block";
-        btn.classList.add("active");
-      }
-
-      // ── Analyzer: single mutation ──
       async function runAnalysis() {
         const seq = document.getElementById("seqInput").value.trim();
         const mut = document.getElementById("mutInput").value.trim();
         const pos = document.getElementById("position").value;
         const mod = document.getElementById("model").value;
         const resultBox = document.getElementById("resultBox");
-        document.getElementById("tablePanel").style.display = "none";
+        const tablePanel = document.getElementById("tablePanel");
+
+        tablePanel.style.display = "none";
 
         if (!seq || !mut || !pos) {
           resultBox.innerHTML = "<p style='color:red;'>Please fill out all three fields.</p>";
           return;
         }
+
         resultBox.innerHTML = "Thinking... (This takes a few seconds)";
 
         try {
           const response = await fetch(
             `/api/predict?sequence=${encodeURIComponent(seq)}&position=${pos}&mutation=${encodeURIComponent(mut)}&model_name=${encodeURIComponent(mod)}`
           );
+
           if (!response.ok) {
             const err = await response.json();
             resultBox.innerHTML = `<p style='color:red;'>Server error: ${JSON.stringify(err.detail ?? err)}</p>`;
             return;
           }
+
           const data = await response.json();
+
           resultBox.innerHTML = `
             <h3>Result:</h3>
             <p><strong>Score:</strong> ${data.score.toFixed(4)}</p>
@@ -144,7 +90,6 @@
         }
       }
 
-      // ── Analyzer: all mutations ──
       async function runAll() {
         const seq = document.getElementById("seqInput").value.trim();
         const pos = document.getElementById("position").value;
@@ -156,6 +101,7 @@
           resultBox.innerHTML = "<p style='color:red;'>Please enter a sequence and position.</p>";
           return;
         }
+
         resultBox.innerHTML = "Running all mutations... (may take a moment)";
         tablePanel.style.display = "none";
 
@@ -163,22 +109,27 @@
           const response = await fetch(
             `/api/predict-all?sequence=${encodeURIComponent(seq)}&position=${pos}&model_name=${encodeURIComponent(mod)}`
           );
+
           if (!response.ok) {
             const err = await response.json();
             resultBox.innerHTML = `<p style='color:red;'>Server error: ${JSON.stringify(err.detail ?? err)}</p>`;
             return;
           }
+
           const data = await response.json();
+
           resultBox.innerHTML = `
             <h3>Done!</h3>
             <p>Wild-type at position ${data.position}: <strong>${data.wildtype}</strong></p>
             <p>Showing all ${data.results.length} mutations →</p>
           `;
+
           document.getElementById("tableTitle").textContent =
             `All Mutations at Position ${data.position} (WT: ${data.wildtype})`;
 
           const tbody = document.getElementById("tableBody");
           tbody.innerHTML = "";
+
           for (const r of data.results) {
             const row = document.createElement("tr");
 
@@ -199,97 +150,12 @@
             `;
             tbody.appendChild(row);
           }
+
           tablePanel.style.display = "flex";
         } catch (error) {
           console.error(error);
           resultBox.innerHTML = "<p style='color:red;'>Error connecting to Python server.</p>";
         }
-      }
-
-      // ── Scanner: full sequence crucialness ──
-      let scanData = [];
-
-      async function runScan() {
-        const seq = document.getElementById("scanSeqInput").value.trim();
-        const mod = document.getElementById("scanModel").value;
-        const status = document.getElementById("scanStatus");
-        const seqMap = document.getElementById("seqMap");
-        const detailPanel = document.getElementById("detailPanel");
-        const legendBox = document.getElementById("legendBox");
-
-        if (!seq) {
-          status.textContent = "Please enter a sequence.";
-          return;
-        }
-
-        status.textContent = `Scanning ${seq.length} positions... this may take a minute.`;
-        seqMap.innerHTML = "";
-        detailPanel.style.display = "none";
-        legendBox.style.display = "none";
-
-        try {
-          const response = await fetch(
-            `/api/scan?sequence=${encodeURIComponent(seq)}&model_name=${encodeURIComponent(mod)}`
-          );
-          if (!response.ok) {
-            const err = await response.json();
-            status.textContent = `Server error: ${JSON.stringify(err.detail ?? err)}`;
-            return;
-          }
-
-          const data = await response.json();
-          scanData = data.positions;
-
-          status.textContent = `Done! ${data.length} positions scanned. Click any residue for details.`;
-          legendBox.style.display = "flex";
-
-          // Build colored sequence map
-          data.positions.forEach(p => {
-            const chip = document.createElement("div");
-            chip.className = `aa-box ${tierClass(p.tier)}`;
-            chip.innerHTML = `<span class="aa-letter">${p.residue}</span><span class="aa-pos">${p.position}</span>`;
-            chip.title = `${p.residue}${p.position} — ${p.tier} (${p.tolerated_count}/19 tolerated)`;
-            chip.onclick = () => showDetail(p);
-            seqMap.appendChild(chip);
-          });
-
-        } catch (error) {
-          console.error(error);
-          status.textContent = "Error connecting to Python server.";
-        }
-      }
-
-      function tierClass(tier) {
-        return {
-          "Core": "tier-core",
-          "Important": "tier-important",
-          "Flexible": "tier-flexible",
-          "Highly Flexible": "tier-hf"
-        }[tier] || "";
-      }
-
-      function showDetail(p) {
-        // Highlight selected box
-        document.querySelectorAll(".aa-box").forEach(b => b.classList.remove("selected"));
-        document.querySelectorAll(".aa-box").forEach(b => {
-          if (b.querySelector(".aa-pos").textContent == p.position) b.classList.add("selected");
-        });
-
-        const panel = document.getElementById("detailPanel");
-        document.getElementById("detailTitle").textContent =
-          `Position ${p.position}: ${p.residue} — ${p.tier} (${p.tolerated_count}/19 substitutions tolerated)`;
-
-        document.getElementById("detailTolerated").innerHTML =
-          p.tolerated.length
-            ? p.tolerated.map(aa => `<span class="chip tolerated">${aa}</span>`).join("")
-            : "<em>None</em>";
-
-        document.getElementById("detailDamaging").innerHTML =
-          p.damaging.length
-            ? p.damaging.map(aa => `<span class="chip damaging">${aa}</span>`).join("")
-            : "<em>None</em>";
-
-        panel.style.display = "block";
       }
     </script>
   </body>
