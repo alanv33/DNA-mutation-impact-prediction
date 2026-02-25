@@ -16,11 +16,11 @@ def load_esm_model(model_name: str):
         loaded_models[model_name] = (tokenizer, model)
     return loaded_models[model_name]
 
+
 @app.get("/api/predict")
-def predict(sequence : str, position : int, mutation: str, model_name: str):
+def predict(sequence: str, position: int, mutation: str, model_name: str):
     tokenizer, model = load_esm_model(model_name)
-    
-    # Tokenize the input
+
     inputs = tokenizer(sequence, return_tensors="pt")
     token_index_in_seq = position
 
@@ -48,8 +48,6 @@ def predict(sequence : str, position : int, mutation: str, model_name: str):
         verdict = "Likely Benign / Beneficial"
     else:
         verdict = "Uncertain / Neutral"
-
-    print(verdict)
 
     return {"score": score, "verdict": verdict}
 
@@ -94,9 +92,70 @@ def predict_all(sequence: str, position: int, model_name: str):
             "verdict": verdict
         })
 
-    # Sort best to worst score
     results.sort(key=lambda x: x["score"], reverse=True)
     return {"wildtype": wildtype_token, "position": position, "results": results}
+
+
+@app.get("/api/scan")
+def scan_sequence(sequence: str, model_name: str):
+    
+    tokenizer, model = load_esm_model(model_name)
+    inputs = tokenizer(sequence, return_tensors="pt")
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits  # shape: [1, seq_len+2, vocab_size]
+
+    seq_len = len(sequence)
+    positions = []
+
+    for i, aa_char in enumerate(sequence):
+        token_index = i + 1  # offset for [CLS] token
+
+        wildtype_id = inputs.input_ids[0, token_index].item()
+        wildtype_token = tokenizer.convert_ids_to_tokens(wildtype_id)
+
+        position_logits = logits[0, token_index]
+        log_probs = torch.nn.functional.log_softmax(position_logits, dim=0)
+        wildtype_log_prob = log_probs[wildtype_id].item()
+
+        tolerated = []
+        damaging = []
+
+        for aa in ALL_AMINO_ACIDS:
+            if aa == wildtype_token:
+                continue  # skip self-comparison
+            mutant_id = tokenizer.convert_tokens_to_ids(aa)
+            mutant_log_prob = log_probs[mutant_id].item()
+            score = mutant_log_prob - wildtype_log_prob
+
+            if score < -2.0:
+                damaging.append(aa)
+            else:
+                tolerated.append(aa)
+
+        tolerated_count = len(tolerated)  # out of 19 possible substitutions
+
+        if tolerated_count <= 3:
+            tier = "Core"
+        elif tolerated_count <= 8:
+            tier = "Important"
+        elif tolerated_count <= 14:
+            tier = "Flexible"
+        else:
+            tier = "Highly Flexible"
+
+        positions.append({
+            "position": i + 1,
+            "residue": wildtype_token,
+            "tolerated_count": tolerated_count,
+            "damaging_count": len(damaging),
+            "tolerated": tolerated,
+            "damaging": damaging,
+            "tier": tier
+        })
+
+    return {"sequence": sequence, "length": seq_len, "positions": positions}
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
