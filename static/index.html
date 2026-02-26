@@ -183,7 +183,7 @@
             const row = document.createElement("tr");
             if (r.is_wildtype) row.classList.add("wt-row");
             else if (r.verdict === "Likely Damaging") row.classList.add("damaging-row");
-            else if (r.verdict === "Likely Benign") row.classList.add("benign-row");
+            else if (r.verdict === "Likely Benign / Beneficial") row.classList.add("benign-row");
             else row.classList.add("neutral-row");
 
             row.innerHTML = `

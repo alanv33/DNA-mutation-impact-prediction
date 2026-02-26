@@ -27,6 +27,8 @@ def predict(sequence: str, position: int, mutation: str, model_name: str):
     wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
     mutant_id = tokenizer.convert_tokens_to_ids(mutation)
 
+    inputs.input_ids[0, token_index_in_seq] = tokenizer.mask_token_id
+
     with torch.no_grad():
         outputs = model(**inputs)
         logits = outputs.logits
@@ -41,8 +43,8 @@ def predict(sequence: str, position: int, mutation: str, model_name: str):
 
     if score < -2.0:
         verdict = "Likely Damaging"
-    elif score <= 0:
-        verdict = "Likely Benign"
+    elif score >= 0:
+        verdict = "Likely Benign / Beneficial"
     else:
         verdict = "Uncertain / Neutral"
 
@@ -57,6 +59,9 @@ def predict_all(sequence: str, position: int, model_name: str):
 
     wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
     wildtype_token = tokenizer.convert_ids_to_tokens(wildtype_id)
+
+    # FIX 1: Add the mask back!
+    inputs.input_ids[0, token_index_in_seq] = tokenizer.mask_token_id
 
     with torch.no_grad():
         outputs = model(**inputs)
@@ -74,8 +79,8 @@ def predict_all(sequence: str, position: int, model_name: str):
 
         if score < -2.0:
             verdict = "Likely Damaging"
-        elif score <= 0:
-            verdict = "Likely Benign"
+        elif score >= 0:
+            verdict = "Likely Benign / Beneficial"
         else:
             verdict = "Uncertain / Neutral"
 
@@ -92,14 +97,9 @@ def predict_all(sequence: str, position: int, model_name: str):
 
 @app.get("/api/scan")
 def scan_sequence(sequence: str, model_name: str):
-    
     tokenizer, model = load_esm_model(model_name)
     inputs = tokenizer(sequence, return_tensors="pt")
-
-    with torch.no_grad():
-        outputs = model(**inputs)
-        logits = outputs.logits  # shape: [1, seq_len+2, vocab_size]
-
+    
     seq_len = len(sequence)
     positions = []
 
@@ -108,6 +108,12 @@ def scan_sequence(sequence: str, model_name: str):
 
         wildtype_id = inputs.input_ids[0, token_index].item()
         wildtype_token = tokenizer.convert_ids_to_tokens(wildtype_id)
+
+        inputs.input_ids[0, token_index] = tokenizer.mask_token_id
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+            logits = outputs.logits  
 
         position_logits = logits[0, token_index]
         log_probs = torch.nn.functional.log_softmax(position_logits, dim=0)
@@ -148,8 +154,9 @@ def scan_sequence(sequence: str, model_name: str):
             "damaging": damaging,
             "tier": tier
         })
+        
+        inputs.input_ids[0, token_index] = wildtype_id
 
     return {"sequence": sequence, "length": seq_len, "positions": positions}
-
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
