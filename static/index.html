@@ -12,8 +12,12 @@
     <div class="tab-bar">
       <button class="tab active" onclick="switchTab('analyzerTab', this)">Mutation Analyzer</button>
       <button class="tab" onclick="switchTab('scannerTab', this)">Sequence Scanner</button>
+      <button class="tab tab-test" onclick="switchTab('testTab', this)">Test Runner</button>
     </div>
 
+    <!-- ══════════════════════════════════════════
+         TAB 1: MUTATION ANALYZER
+    ══════════════════════════════════════════ -->
     <div id="analyzerTab" class="tab-content">
       <div class="page-wrapper">
         <div class="container">
@@ -30,32 +34,30 @@
           <input type="text" id="seqInput" placeholder="Sequence" />
           <input type="text" id="mutInput" placeholder="Mutation (e.g. P) — ignored for ALL" />
           <input type="number" id="position" min="1" placeholder="Position of mutation" />
-
           <div class="button-row">
             <button onclick="runAnalysis()">Analyze</button>
             <button onclick="runAll()" class="btn-all">Analyze ALL</button>
           </div>
-
           <div id="resultBox" style="margin-top:20px"></div>
         </div>
 
         <div class="table-panel" id="tablePanel" style="display:none">
           <h2 id="tableTitle">All Mutations</h2>
           <table id="resultsTable">
-            <thead>
-              <tr><th>Mutation</th><th>Score</th><th>Verdict</th></tr>
-            </thead>
+            <thead><tr><th>Mutation</th><th>Score</th><th>Verdict</th></tr></thead>
             <tbody id="tableBody"></tbody>
           </table>
         </div>
       </div>
     </div>
 
+    <!-- ══════════════════════════════════════════
+         TAB 2: SEQUENCE SCANNER
+    ══════════════════════════════════════════ -->
     <div id="scannerTab" class="tab-content" style="display:none">
       <div class="container scanner-container">
         <h1>Sequence Scanner</h1>
         <p>Identify which positions in the strand are crucial vs. flexible.</p>
-
         <label for="scanModel">Choose size of model:</label>
         <select id="scanModel">
           <option value="facebook/esm2_t6_8M_UR50D">8 Million</option>
@@ -64,14 +66,11 @@
           <option value="facebook/esm2_t36_3B_UR50D">3 Billion</option>
         </select>
         <p style="font-size:0.85em;">Larger model = better accuracy but slower</p>
-
         <input type="text" id="scanSeqInput" placeholder="Paste your full sequence here" style="width:90%" />
         <button onclick="runScan()" class="btn-scan">Scan Full Sequence</button>
-
         <div id="scanStatus" style="margin-top:14px;font-style:italic;color:#444;"></div>
       </div>
 
-      <!-- Legend -->
       <div id="legendBox" style="display:none" class="legend-box">
         <strong>Crucialness Scale</strong>
         <span class="legend-chip core">Core (0–3 replacements)</span>
@@ -80,10 +79,8 @@
         <span class="legend-chip highly-flexible">Highly Flexible (15–19)</span>
       </div>
 
-      <!-- Sequence map: colored AA boxes -->
       <div id="seqMap" class="seq-map"></div>
 
-      <!-- Detail table shown on click -->
       <div id="detailPanel" class="detail-panel" style="display:none">
         <h3 id="detailTitle"></h3>
         <div class="detail-cols">
@@ -96,6 +93,111 @@
             <div id="detailDamaging" class="aa-chip-list"></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         TAB 3: TEST RUNNER
+    ══════════════════════════════════════════ -->
+    <div id="testTab" class="tab-content" style="display:none">
+      <div class="test-runner-wrapper">
+
+        <!-- Header card -->
+        <div class="test-header-card">
+          <div class="test-header-left">
+            <h1>🧪 Validation Test Suite</h1>
+            <p>Runs <code>test_mutations.py</code> against the live server using real-world ClinVar/UniProt mutations.</p>
+          </div>
+          <button id="runTestsBtn" onclick="runTests()" class="btn-run-tests">▶ Run All Tests</button>
+        </div>
+
+        <!-- Summary bar (hidden until tests run) -->
+        <div id="testSummary" class="test-summary" style="display:none">
+          <div class="summary-chip passed-chip"><span id="passCount">0</span> Passed</div>
+          <div class="summary-chip failed-chip"><span id="failCount">0</span> Failed</div>
+          <div class="summary-chip total-chip"><span id="totalCount">0</span> Total</div>
+          <div class="summary-chip duration-chip">⏱ <span id="durationCount">0</span>s</div>
+          <div id="overallBadge" class="overall-badge"></div>
+        </div>
+
+        <!-- Loading state -->
+        <div id="testLoading" style="display:none; text-align:center; padding:40px; color:#ccc; font-style:italic;">
+          Running tests... this may take 30–60 seconds while the model runs.
+        </div>
+
+        <!-- Error state -->
+        <div id="testError" style="display:none; color:#f88; padding:20px; background:#2a1a1a; border-radius:8px; margin-top:16px;"></div>
+
+        <!-- Results grouped by class -->
+        <div id="testResults"></div>
+
+        <!-- ══ CUSTOM TESTS SECTION ══ -->
+        <div class="custom-section">
+          <div class="custom-section-header">
+            <div>
+              <h2>🔬 Custom Test Cases</h2>
+              <p>Build your own test cases and run them against the live model. Each test checks if the LLR verdict matches your expected outcome.</p>
+            </div>
+            <button onclick="runCustomTests()" id="runCustomBtn" class="btn-run-custom">▶ Run Custom Tests</button>
+          </div>
+
+          <!-- Add test form -->
+          <div class="custom-form">
+            <div class="custom-form-title">➕ Add Test Case</div>
+            <div class="custom-form-grid">
+              <div class="form-field">
+                <label>Test Name</label>
+                <input type="text" id="ct-name" placeholder="e.g. My BRCA1 test" />
+              </div>
+              <div class="form-field">
+                <label>Sequence</label>
+                <input type="text" id="ct-seq" placeholder="Amino acid sequence" />
+              </div>
+              <div class="form-field form-field-sm">
+                <label>Position</label>
+                <input type="number" id="ct-pos" placeholder="e.g. 6" min="1" />
+              </div>
+              <div class="form-field form-field-sm">
+                <label>Mutation</label>
+                <input type="text" id="ct-mut" placeholder="e.g. V" maxlength="1" />
+              </div>
+              <div class="form-field form-field-sm">
+                <label>Expected Verdict</label>
+                <select id="ct-expected">
+                  <option value="Likely Damaging">Likely Damaging</option>
+                  <option value="Likely Benign">Likely Benign</option>
+                  <option value="Uncertain / Neutral">Uncertain / Neutral</option>
+                  <option value="any">Any (no assertion)</option>
+                </select>
+              </div>
+              <div class="form-field form-field-sm">
+                <label>Model</label>
+                <select id="ct-model">
+                  <option value="facebook/esm2_t6_8M_UR50D">8M</option>
+                  <option value="facebook/esm2_t12_35M_UR50D">35M</option>
+                  <option value="facebook/esm2_t33_650M_UR50D">650M</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button onclick="addCustomTest()" class="btn-add-test">+ Add to Queue</button>
+              <button onclick="loadPresets()" class="btn-presets">Load Example Tests</button>
+            </div>
+          </div>
+
+          <!-- Queue of pending tests -->
+          <div id="customQueue" class="custom-queue" style="display:none">
+            <div class="queue-header">
+              <span id="queueCount">0 tests queued</span>
+              <button onclick="clearQueue()" class="btn-clear-queue">Clear All</button>
+            </div>
+            <div id="queueList"></div>
+          </div>
+
+          <!-- Custom test results -->
+          <div id="customResults"></div>
+        </div>
+
       </div>
     </div>
 
@@ -116,32 +218,17 @@
         const mod = document.getElementById("model").value;
         const resultBox = document.getElementById("resultBox");
         document.getElementById("tablePanel").style.display = "none";
-
         if (!seq || !mut || !pos) {
           resultBox.innerHTML = "<p style='color:red;'>Please fill out all three fields.</p>";
           return;
         }
         resultBox.innerHTML = "Thinking... (This takes a few seconds)";
-
         try {
-          const response = await fetch(
-            `/api/predict?sequence=${encodeURIComponent(seq)}&position=${pos}&mutation=${encodeURIComponent(mut)}&model_name=${encodeURIComponent(mod)}`
-          );
-          if (!response.ok) {
-            const err = await response.json();
-            resultBox.innerHTML = `<p style='color:red;'>Server error: ${JSON.stringify(err.detail ?? err)}</p>`;
-            return;
-          }
+          const response = await fetch(`/api/predict?sequence=${encodeURIComponent(seq)}&position=${pos}&mutation=${encodeURIComponent(mut)}&model_name=${encodeURIComponent(mod)}`);
+          if (!response.ok) { const err = await response.json(); resultBox.innerHTML = `<p style='color:red;'>Server error: ${JSON.stringify(err.detail ?? err)}</p>`; return; }
           const data = await response.json();
-          resultBox.innerHTML = `
-            <h3>Result:</h3>
-            <p><strong>Score:</strong> ${data.score.toFixed(4)}</p>
-            <p><strong>Verdict:</strong> ${data.verdict}</p>
-          `;
-        } catch (error) {
-          console.error(error);
-          resultBox.innerHTML = "<p style='color:red;'>Error connecting to Python server.</p>";
-        }
+          resultBox.innerHTML = `<h3>Result:</h3><p><strong>Score:</strong> ${data.score.toFixed(4)}</p><p><strong>Verdict:</strong> ${data.verdict}</p>`;
+        } catch (error) { console.error(error); resultBox.innerHTML = "<p style='color:red;'>Error connecting to Python server.</p>"; }
       }
 
       // ── Analyzer: all mutations ──
@@ -151,58 +238,32 @@
         const mod = document.getElementById("model").value;
         const resultBox = document.getElementById("resultBox");
         const tablePanel = document.getElementById("tablePanel");
-
-        if (!seq || !pos) {
-          resultBox.innerHTML = "<p style='color:red;'>Please enter a sequence and position.</p>";
-          return;
-        }
+        if (!seq || !pos) { resultBox.innerHTML = "<p style='color:red;'>Please enter a sequence and position.</p>"; return; }
         resultBox.innerHTML = "Running all mutations... (may take a moment)";
         tablePanel.style.display = "none";
-
         try {
-          const response = await fetch(
-            `/api/predict-all?sequence=${encodeURIComponent(seq)}&position=${pos}&model_name=${encodeURIComponent(mod)}`
-          );
-          if (!response.ok) {
-            const err = await response.json();
-            resultBox.innerHTML = `<p style='color:red;'>Server error: ${JSON.stringify(err.detail ?? err)}</p>`;
-            return;
-          }
+          const response = await fetch(`/api/predict-all?sequence=${encodeURIComponent(seq)}&position=${pos}&model_name=${encodeURIComponent(mod)}`);
+          if (!response.ok) { const err = await response.json(); resultBox.innerHTML = `<p style='color:red;'>Server error: ${JSON.stringify(err.detail ?? err)}</p>`; return; }
           const data = await response.json();
-          resultBox.innerHTML = `
-            <h3>Done!</h3>
-            <p>Wild-type at position ${data.position}: <strong>${data.wildtype}</strong></p>
-            <p>Showing all ${data.results.length} mutations →</p>
-          `;
-          document.getElementById("tableTitle").textContent =
-            `All Mutations at Position ${data.position} (WT: ${data.wildtype})`;
-
+          resultBox.innerHTML = `<h3>Done!</h3><p>Wild-type at position ${data.position}: <strong>${data.wildtype}</strong></p><p>Showing all ${data.results.length} mutations →</p>`;
+          document.getElementById("tableTitle").textContent = `All Mutations at Position ${data.position} (WT: ${data.wildtype})`;
           const tbody = document.getElementById("tableBody");
           tbody.innerHTML = "";
           for (const r of data.results) {
             const row = document.createElement("tr");
             if (r.is_wildtype) row.classList.add("wt-row");
             else if (r.verdict === "Likely Damaging") row.classList.add("damaging-row");
-            else if (r.verdict === "Likely Benign / Beneficial") row.classList.add("benign-row");
+            else if (r.verdict === "Likely Benign") row.classList.add("benign-row");
             else row.classList.add("neutral-row");
-
-            row.innerHTML = `
-              <td>${r.mutation}${r.is_wildtype ? " ★" : ""}</td>
-              <td>${r.score.toFixed(4)}</td>
-              <td>${r.is_wildtype ? "Wild-Type" : r.verdict}</td>
-            `;
+            row.innerHTML = `<td>${r.mutation}${r.is_wildtype ? " ★" : ""}</td><td>${r.score.toFixed(4)}</td><td>${r.is_wildtype ? "Wild-Type" : r.verdict}</td>`;
             tbody.appendChild(row);
           }
           tablePanel.style.display = "flex";
-        } catch (error) {
-          console.error(error);
-          resultBox.innerHTML = "<p style='color:red;'>Error connecting to Python server.</p>";
-        }
+        } catch (error) { console.error(error); resultBox.innerHTML = "<p style='color:red;'>Error connecting to Python server.</p>"; }
       }
 
-      // ── Scanner: full sequence crucialness ──
+      // ── Scanner ──
       let scanData = [];
-
       async function runScan() {
         const seq = document.getElementById("scanSeqInput").value.trim();
         const mod = document.getElementById("scanModel").value;
@@ -210,34 +271,16 @@
         const seqMap = document.getElementById("seqMap");
         const detailPanel = document.getElementById("detailPanel");
         const legendBox = document.getElementById("legendBox");
-
-        if (!seq) {
-          status.textContent = "Please enter a sequence.";
-          return;
-        }
-
+        if (!seq) { status.textContent = "Please enter a sequence."; return; }
         status.textContent = `Scanning ${seq.length} positions... this may take a minute.`;
-        seqMap.innerHTML = "";
-        detailPanel.style.display = "none";
-        legendBox.style.display = "none";
-
+        seqMap.innerHTML = ""; detailPanel.style.display = "none"; legendBox.style.display = "none";
         try {
-          const response = await fetch(
-            `/api/scan?sequence=${encodeURIComponent(seq)}&model_name=${encodeURIComponent(mod)}`
-          );
-          if (!response.ok) {
-            const err = await response.json();
-            status.textContent = `Server error: ${JSON.stringify(err.detail ?? err)}`;
-            return;
-          }
-
+          const response = await fetch(`/api/scan?sequence=${encodeURIComponent(seq)}&model_name=${encodeURIComponent(mod)}`);
+          if (!response.ok) { const err = await response.json(); status.textContent = `Server error: ${JSON.stringify(err.detail ?? err)}`; return; }
           const data = await response.json();
           scanData = data.positions;
-
           status.textContent = `Done! ${data.length} positions scanned. Click any residue for details.`;
           legendBox.style.display = "flex";
-
-          // Build colored sequence map
           data.positions.forEach(p => {
             const chip = document.createElement("div");
             chip.className = `aa-box ${tierClass(p.tier)}`;
@@ -246,44 +289,274 @@
             chip.onclick = () => showDetail(p);
             seqMap.appendChild(chip);
           });
-
-        } catch (error) {
-          console.error(error);
-          status.textContent = "Error connecting to Python server.";
-        }
+        } catch (error) { console.error(error); status.textContent = "Error connecting to Python server."; }
       }
 
       function tierClass(tier) {
-        return {
-          "Core": "tier-core",
-          "Important": "tier-important",
-          "Flexible": "tier-flexible",
-          "Highly Flexible": "tier-hf"
-        }[tier] || "";
+        return {"Core":"tier-core","Important":"tier-important","Flexible":"tier-flexible","Highly Flexible":"tier-hf"}[tier] || "";
       }
 
       function showDetail(p) {
-        // Highlight selected box
         document.querySelectorAll(".aa-box").forEach(b => b.classList.remove("selected"));
-        document.querySelectorAll(".aa-box").forEach(b => {
-          if (b.querySelector(".aa-pos").textContent == p.position) b.classList.add("selected");
-        });
-
+        document.querySelectorAll(".aa-box").forEach(b => { if (b.querySelector(".aa-pos").textContent == p.position) b.classList.add("selected"); });
         const panel = document.getElementById("detailPanel");
-        document.getElementById("detailTitle").textContent =
-          `Position ${p.position}: ${p.residue} — ${p.tier} (${p.tolerated_count}/19 substitutions tolerated)`;
-
-        document.getElementById("detailTolerated").innerHTML =
-          p.tolerated.length
-            ? p.tolerated.map(aa => `<span class="chip tolerated">${aa}</span>`).join("")
-            : "<em>None</em>";
-
-        document.getElementById("detailDamaging").innerHTML =
-          p.damaging.length
-            ? p.damaging.map(aa => `<span class="chip damaging">${aa}</span>`).join("")
-            : "<em>None</em>";
-
+        document.getElementById("detailTitle").textContent = `Position ${p.position}: ${p.residue} — ${p.tier} (${p.tolerated_count}/19 substitutions tolerated)`;
+        document.getElementById("detailTolerated").innerHTML = p.tolerated.length ? p.tolerated.map(aa => `<span class="chip tolerated">${aa}</span>`).join("") : "<em>None</em>";
+        document.getElementById("detailDamaging").innerHTML = p.damaging.length ? p.damaging.map(aa => `<span class="chip damaging">${aa}</span>`).join("") : "<em>None</em>";
         panel.style.display = "block";
+      }
+
+      // ── Test Runner ──
+      const CLASS_LABELS = {
+        "TestEndpointStructure":       { label: "Unit Tests — Endpoint Structure",         icon: "🔧" },
+        "TestKnownPathogenicMutations":{ label: "Biological Validation — Pathogenic",      icon: "🔴" },
+        "TestKnownBenignMutations":    { label: "Biological Validation — Benign/Tolerated",icon: "🟢" },
+        "TestEdgeCases":               { label: "Edge Cases",                               icon: "⚠️" },
+      };
+
+      const TEST_CONTEXT = {
+        "test_HBB_E6V_sickle_cell":              { mutation: "HBB E6V",  disease: "Sickle cell anemia",    source: "ClinVar Pathogenic", sequence: "MVHLTPEEKSAVTALWGKVNVD", position: 6,  mutant: "V" },
+        "test_HBB_E6K_hemoglobin_C":             { mutation: "HBB E6K",  disease: "Hemoglobin C disease",  source: "ClinVar Pathogenic", sequence: "MVHLTPEEKSAVTALWGKVNVD", position: 6,  mutant: "K" },
+        "test_KRAS_G12D_oncogenic":              { mutation: "KRAS G12D",disease: "Pancreatic cancer",      source: "ClinVar Pathogenic", sequence: "MTEYKLVVVGAGGVGKSALTIQL", position: 12, mutant: "D" },
+        "test_KRAS_G12V_oncogenic":              { mutation: "KRAS G12V",disease: "Lung adenocarcinoma",    source: "ClinVar Pathogenic", sequence: "MTEYKLVVVGAGGVGKSALTIQL", position: 12, mutant: "V" },
+        "test_HBB_wildtype_self_comparison":     { mutation: "HBB self", disease: "Wild-type (control)",   source: "LLR = 0 expected",   sequence: "MVHLTPEEKSAVTALWGKVNVD", position: 6,  mutant: "auto" },
+        "test_HBB_E6D_conservative_substitution":{ mutation: "HBB E6D",  disease: "Conservative sub",      source: "Glu→Asp (similar)",  sequence: "MVHLTPEEKSAVTALWGKVNVD", position: 6,  mutant: "D" },
+      };
+
+      // ── Custom test queue ──
+      let customTests = [];
+
+      const PRESET_TESTS = [
+        { name: "HBB E6V (Sickle Cell)", seq: "MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH", pos: 6, mut: "V", expected: "Likely Damaging",    model: "facebook/esm2_t6_8M_UR50D" },
+        { name: "KRAS G12D (Oncogenic)",  seq: "MTEYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPTIEDSY",                                                                                                               pos: 12, mut: "D", expected: "Likely Damaging",    model: "facebook/esm2_t6_8M_UR50D" },
+        { name: "HBB E6D (Benign sub)",   seq: "MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH", pos: 6, mut: "D", expected: "Likely Benign",      model: "facebook/esm2_t6_8M_UR50D" },
+        { name: "KRAS G12A (Mild)",       seq: "MTEYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPTIEDSY",                                                                                                               pos: 12, mut: "A", expected: "any",               model: "facebook/esm2_t6_8M_UR50D" },
+      ];
+
+      function loadPresets() {
+        customTests = [...PRESET_TESTS];
+        renderQueue();
+      }
+
+      function addCustomTest() {
+        const name     = document.getElementById("ct-name").value.trim();
+        const seq      = document.getElementById("ct-seq").value.trim();
+        const pos      = parseInt(document.getElementById("ct-pos").value);
+        const mut      = document.getElementById("ct-mut").value.trim().toUpperCase();
+        const expected = document.getElementById("ct-expected").value;
+        const model    = document.getElementById("ct-model").value;
+
+        if (!seq || !mut || isNaN(pos)) {
+          alert("Please fill in Sequence, Position, and Mutation.");
+          return;
+        }
+
+        customTests.push({ name: name || `Test ${customTests.length + 1}`, seq, pos, mut, expected, model });
+        renderQueue();
+
+        // Clear inputs
+        document.getElementById("ct-name").value = "";
+        document.getElementById("ct-seq").value  = "";
+        document.getElementById("ct-pos").value  = "";
+        document.getElementById("ct-mut").value  = "";
+      }
+
+      function removeCustomTest(i) {
+        customTests.splice(i, 1);
+        renderQueue();
+      }
+
+      function clearQueue() {
+        customTests = [];
+        renderQueue();
+        document.getElementById("customResults").innerHTML = "";
+      }
+
+      function renderQueue() {
+        const queueDiv = document.getElementById("customQueue");
+        const listDiv  = document.getElementById("queueList");
+        const countEl  = document.getElementById("queueCount");
+
+        if (customTests.length === 0) { queueDiv.style.display = "none"; return; }
+        queueDiv.style.display = "block";
+        countEl.textContent = `${customTests.length} test${customTests.length > 1 ? "s" : ""} queued`;
+
+        listDiv.innerHTML = customTests.map((t, i) => `
+          <div class="queue-item">
+            <span class="queue-name">${t.name}</span>
+            <span class="queue-pill">pos ${t.pos}</span>
+            <span class="queue-pill">mut ${t.mut}</span>
+            <span class="queue-pill queue-pill-expect">${t.expected}</span>
+            <span class="queue-seq" title="${t.seq}">${t.seq.slice(0,16)}…</span>
+            <button class="queue-remove" onclick="removeCustomTest(${i})">✕</button>
+          </div>
+        `).join("");
+      }
+
+      async function runCustomTests() {
+        if (customTests.length === 0) {
+          alert("Add at least one test case first, or click 'Load Example Tests'.");
+          return;
+        }
+        const btn = document.getElementById("runCustomBtn");
+        btn.disabled = true;
+        btn.textContent = "Running...";
+
+        const resultsDiv = document.getElementById("customResults");
+        resultsDiv.innerHTML = `<div class="custom-running">Running ${customTests.length} test${customTests.length > 1 ? "s" : ""}...</div>`;
+
+        const results = [];
+        for (const t of customTests) {
+          try {
+            const resp = await fetch(`/api/predict?sequence=${encodeURIComponent(t.seq)}&position=${t.pos}&mutation=${encodeURIComponent(t.mut)}&model_name=${encodeURIComponent(t.model)}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            const passed = t.expected === "any" || data.verdict === t.expected;
+            results.push({ ...t, score: data.score, verdict: data.verdict, passed, error: null });
+          } catch (err) {
+            results.push({ ...t, score: null, verdict: "Error", passed: false, error: err.message });
+          }
+        }
+
+        const passCount = results.filter(r => r.passed).length;
+        const failCount = results.length - passCount;
+
+        resultsDiv.innerHTML = `
+          <div class="custom-summary">
+            <span class="cs-chip cs-pass"><span>${passCount}</span> Passed</span>
+            <span class="cs-chip cs-fail"><span>${failCount}</span> Failed</span>
+            <span class="cs-chip cs-total"><span>${results.length}</span> Total</span>
+            <span class="cs-overall ${passCount === results.length ? 'cs-overall-pass' : 'cs-overall-fail'}">
+              ${passCount === results.length ? "✅ ALL PASSED" : `❌ ${failCount} FAILED`}
+            </span>
+          </div>
+          ${results.map(r => `
+            <div class="custom-result-row ${r.passed ? "cr-pass" : "cr-fail"}">
+              <div class="cr-top">
+                <span class="test-badge ${r.passed ? "badge-pass-sm" : "badge-fail-sm"}">${r.passed ? "PASS" : "FAIL"}</span>
+                <span class="cr-name">${r.name}</span>
+                ${r.score !== null ? `<span class="score-value ${r.score < -2 ? 'score-damaging' : r.score < 0 ? 'score-benign' : 'score-neutral'}">${r.score.toFixed(4)}</span>` : ""}
+                <span class="cr-verdict ${r.verdict === 'Likely Damaging' ? 'verdict-damage' : r.verdict === 'Likely Benign' ? 'verdict-benign' : 'verdict-neutral'}">${r.verdict}</span>
+              </div>
+              <div class="cr-inputs">
+                <span class="cr-input-chip">📍 pos <strong>${r.pos}</strong></span>
+                <span class="cr-input-chip">🔬 mut <strong>${r.mut}</strong></span>
+                <span class="cr-input-chip">🎯 expected <strong>${r.expected}</strong></span>
+                <span class="cr-input-chip cr-seq-chip" title="${r.seq}">🧬 ${r.seq.slice(0,20)}${r.seq.length > 20 ? "…" : ""}</span>
+              </div>
+              ${!r.passed ? `<div class="cr-fail-msg">Expected <strong>${r.expected}</strong> but got <strong>${r.verdict}</strong>${r.error ? ` — ${r.error}` : ""}</div>` : ""}
+            </div>
+          `).join("")}
+        `;
+
+        btn.disabled = false;
+        btn.textContent = "▶ Run Custom Tests";
+      }
+
+      async function runTests() {
+        const btn = document.getElementById("runTestsBtn");
+        const loading = document.getElementById("testLoading");
+        const summary = document.getElementById("testSummary");
+        const results = document.getElementById("testResults");
+        const errorBox = document.getElementById("testError");
+
+        btn.disabled = true;
+        btn.textContent = "Running...";
+        loading.style.display = "block";
+        summary.style.display = "none";
+        results.innerHTML = "";
+        errorBox.style.display = "none";
+
+        try {
+          const response = await fetch("/api/run-tests");
+          const data = await response.json();
+
+          loading.style.display = "none";
+          btn.disabled = false;
+          btn.textContent = "▶ Run All Tests";
+
+          if (data.error) {
+            errorBox.style.display = "block";
+            errorBox.textContent = data.error;
+            return;
+          }
+
+          // Summary bar
+          document.getElementById("passCount").textContent = data.passed;
+          document.getElementById("failCount").textContent = data.failed;
+          document.getElementById("totalCount").textContent = data.total;
+          document.getElementById("durationCount").textContent = data.duration;
+          const badge = document.getElementById("overallBadge");
+          if (data.failed === 0) {
+            badge.textContent = "✅ ALL PASSED";
+            badge.className = "overall-badge badge-pass";
+          } else {
+            badge.textContent = `❌ ${data.failed} FAILED`;
+            badge.className = "overall-badge badge-fail";
+          }
+          summary.style.display = "flex";
+
+          // Group tests by class
+          const groups = {};
+          for (const t of data.tests) {
+            if (!groups[t.class]) groups[t.class] = [];
+            groups[t.class].push(t);
+          }
+
+          for (const [cls, tests] of Object.entries(groups)) {
+            const info = CLASS_LABELS[cls] || { label: cls, icon: "📋" };
+            const groupPassed = tests.filter(t => t.outcome === "passed").length;
+
+            const section = document.createElement("div");
+            section.className = "test-group";
+            section.innerHTML = `
+              <div class="test-group-header">
+                <span>${info.icon} ${info.label}</span>
+                <span class="group-count ${groupPassed === tests.length ? 'group-all-pass' : 'group-has-fail'}">${groupPassed}/${tests.length} passed</span>
+              </div>
+            `;
+
+            for (const t of tests) {
+              const ctx = TEST_CONTEXT[t.name];
+              const passed = t.outcome === "passed";
+
+              // Extract LLR score from stdout if present
+              const scoreMatch = t.stdout && t.stdout.match(/Score:\s*([-\d.]+)/);
+              const score = scoreMatch ? parseFloat(scoreMatch[1]) : null;
+
+              const row = document.createElement("div");
+              row.className = `test-row ${passed ? "test-pass" : "test-fail"}`;
+              row.innerHTML = `
+                <div class="test-row-main">
+                  <span class="test-badge ${passed ? "badge-pass-sm" : "badge-fail-sm"}">${passed ? "PASS" : "FAIL"}</span>
+                  <span class="test-name">${formatTestName(t.name)}</span>
+                  ${ctx ? `<span class="test-meta">${ctx.mutation} · ${ctx.disease} · <em>${ctx.source}</em></span>` : ""}
+                  ${ctx && ctx.sequence ? `<span class="test-input-pill" title="Sequence">${ctx.sequence.slice(0,12)}… pos:${ctx.position} mut:${ctx.mutant}</span>` : ""}
+                  <span class="test-duration">${t.duration}s</span>
+                </div>
+                ${score !== null ? `<div class="test-score-bar">
+                  <span class="score-label">LLR Score:</span>
+                  <span class="score-value ${score < -2 ? 'score-damaging' : score < 0 ? 'score-benign' : 'score-neutral'}">${score.toFixed(4)}</span>
+                  <div class="score-bar-track"><div class="score-bar-fill" style="width:${Math.min(Math.abs(score)/5*100,100)}%; background:${score < -2 ? '#e74c3c' : score < 0 ? '#27ae60' : '#f39c12'}"></div></div>
+                </div>` : ""}
+                ${!passed && t.message ? `<div class="test-error-msg"><pre>${t.message.slice(0, 400)}</pre></div>` : ""}
+              `;
+              section.appendChild(row);
+            }
+            results.appendChild(section);
+          }
+
+        } catch (err) {
+          loading.style.display = "none";
+          btn.disabled = false;
+          btn.textContent = "▶ Run All Tests";
+          errorBox.style.display = "block";
+          errorBox.textContent = "Could not connect to server. Make sure the FastAPI server is running.";
+        }
+      }
+
+      function formatTestName(name) {
+        return name.replace(/^test_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
       }
     </script>
   </body>

@@ -27,8 +27,6 @@ def predict(sequence: str, position: int, mutation: str, model_name: str):
     wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
     mutant_id = tokenizer.convert_tokens_to_ids(mutation)
 
-    inputs.input_ids[0, token_index_in_seq] = tokenizer.mask_token_id
-
     with torch.no_grad():
         outputs = model(**inputs)
         logits = outputs.logits
@@ -43,8 +41,8 @@ def predict(sequence: str, position: int, mutation: str, model_name: str):
 
     if score < -2.0:
         verdict = "Likely Damaging"
-    elif score >= 0:
-        verdict = "Likely Benign / Beneficial"
+    elif score <= 0:
+        verdict = "Likely Benign"
     else:
         verdict = "Uncertain / Neutral"
 
@@ -59,9 +57,6 @@ def predict_all(sequence: str, position: int, model_name: str):
 
     wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
     wildtype_token = tokenizer.convert_ids_to_tokens(wildtype_id)
-
-    # FIX 1: Add the mask back!
-    inputs.input_ids[0, token_index_in_seq] = tokenizer.mask_token_id
 
     with torch.no_grad():
         outputs = model(**inputs)
@@ -79,8 +74,8 @@ def predict_all(sequence: str, position: int, model_name: str):
 
         if score < -2.0:
             verdict = "Likely Damaging"
-        elif score >= 0:
-            verdict = "Likely Benign / Beneficial"
+        elif score <= 0:
+            verdict = "Likely Benign"
         else:
             verdict = "Uncertain / Neutral"
 
@@ -97,9 +92,18 @@ def predict_all(sequence: str, position: int, model_name: str):
 
 @app.get("/api/scan")
 def scan_sequence(sequence: str, model_name: str):
+    """
+    Runs the model ONCE for the full sequence, then scores all 20 amino acids
+    at every position in a single forward pass. Returns crucialness data for
+    each position based on how many AAs can replace it without being damaging.
+    """
     tokenizer, model = load_esm_model(model_name)
     inputs = tokenizer(sequence, return_tensors="pt")
-    
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits  # shape: [1, seq_len+2, vocab_size]
+
     seq_len = len(sequence)
     positions = []
 
@@ -108,12 +112,6 @@ def scan_sequence(sequence: str, model_name: str):
 
         wildtype_id = inputs.input_ids[0, token_index].item()
         wildtype_token = tokenizer.convert_ids_to_tokens(wildtype_id)
-
-        inputs.input_ids[0, token_index] = tokenizer.mask_token_id
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-            logits = outputs.logits  
 
         position_logits = logits[0, token_index]
         log_probs = torch.nn.functional.log_softmax(position_logits, dim=0)
@@ -154,9 +152,101 @@ def scan_sequence(sequence: str, model_name: str):
             "damaging": damaging,
             "tier": tier
         })
-        
-        inputs.input_ids[0, token_index] = wildtype_id
 
     return {"sequence": sequence, "length": seq_len, "positions": positions}
+
+
+@app.get("/api/run-tests")
+def run_tests():
+    """
+    Runs pytest with -v --tb=short and parses the output directly.
+    No extra plugins required.
+    """
+    import subprocess
+    import os
+    import re
+    import time
+
+    test_file = os.path.join(os.path.dirname(__file__), "test_mutations.py")
+    start = time.time()
+
+    result = subprocess.run(
+        ["python", "-m", "pytest", test_file, "-v", "--tb=short", "-s"],
+        capture_output=True, text=True
+    )
+
+    duration = round(time.time() - start, 2)
+    output = result.stdout + result.stderr
+
+    tests = []
+    test_line_re = re.compile(
+        r"test_mutations\.py::(\w+)::(\w+)\s+(PASSED|FAILED|ERROR)"
+    )
+
+    # Collect failure messages
+    failure_blocks = {}
+    fail_section = re.split(r"=+ FAILURES =+", output)
+    if len(fail_section) > 1:
+        blocks = re.split(r"_{5,}", fail_section[1])
+        for block in blocks:
+            lines = block.strip().splitlines()
+            if not lines:
+                continue
+            name_match = re.search(r"(\w+)\s*$", lines[0])
+            if name_match:
+                failure_blocks[name_match.group(1)] = block.strip()
+
+    # Split output into per-test chunks using PASSED/FAILED markers
+    # Build a map of test_name -> its captured stdout block
+    stdout_blocks = {}
+    # pytest -s prints stdout inline; capture everything between test headers
+    test_positions = [(m.start(), m.group(1), m.group(2), m.group(3))
+                      for m in test_line_re.finditer(output)]
+
+    for i, (pos, cls, tname, outcome_str) in enumerate(test_positions):
+        # Look backward from the PASSED/FAILED line to find printed output
+        start = test_positions[i-1][0] if i > 0 else 0
+        chunk = output[start:pos]
+        stdout_blocks[tname] = chunk.strip()
+
+    for m in test_line_re.finditer(output):
+        class_name = m.group(1)
+        test_name  = m.group(2)
+        outcome    = m.group(3).lower()
+
+        # Extract LLR score from captured stdout
+        chunk = stdout_blocks.get(test_name, "")
+        score_match = re.search(r"Score:\s*([-\d.]+)", chunk)
+        stdout_score = score_match.group(1) if score_match else ""
+
+        # Build clean log lines for this test
+        log_lines = []
+        for line in chunk.splitlines():
+            line = line.strip()
+            if line and not line.startswith("PASSED") and not line.startswith("FAILED"):
+                log_lines.append(line)
+
+        tests.append({
+            "id": f"test_mutations.py::{class_name}::{test_name}",
+            "class": class_name,
+            "name": test_name,
+            "outcome": outcome,
+            "duration": 0,
+            "message": failure_blocks.get(test_name, ""),
+            "stdout": stdout_score,
+            "logs": "\n".join(log_lines)
+        })
+
+    passed = sum(1 for t in tests if t["outcome"] == "passed")
+    failed = sum(1 for t in tests if t["outcome"] in ("failed", "error"))
+
+    return {
+        "total": len(tests),
+        "passed": passed,
+        "failed": failed,
+        "duration": duration,
+        "tests": tests
+    }
+
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
