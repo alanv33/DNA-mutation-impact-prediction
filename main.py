@@ -1,21 +1,37 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 import torch
 from transformers import AutoTokenizer, EsmForMaskedLM
-
-app = FastAPI()
+import threading
 
 loaded_models = {}
-
 ALL_AMINO_ACIDS = list("ACDEFGHIKLMNPQRSTVWY")
+
+def background_load():
+    print("Starting background model loading...")
+    load_esm_model("facebook/esm2_t6_8M_UR50D")
+    print("Background loading complete.")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    threading.Thread(target=background_load, daemon=True).start()
+    yield
+    loaded_models.clear()
+
+app = FastAPI(lifespan=lifespan)
 
 def load_esm_model(model_name: str):
     if model_name not in loaded_models:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = EsmForMaskedLM.from_pretrained(model_name)
+        
+        model = torch.quantization.quantize_dynamic(
+            model, {torch.nn.Linear}, dtype=torch.qint8
+        )
+        
         loaded_models[model_name] = (tokenizer, model)
     return loaded_models[model_name]
-
 
 @app.get("/api/predict")
 def predict(sequence: str, position: int, mutation: str, model_name: str):
