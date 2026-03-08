@@ -40,11 +40,15 @@ def predict(sequence: str, position: int, mutation: str, model_name: str):
     inputs = tokenizer(sequence, return_tensors="pt")
     token_index_in_seq = position
 
+    # Save the real wild-type token ID before masking
     wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
     mutant_id = tokenizer.convert_tokens_to_ids(mutation)
 
+    masked_inputs = inputs.input_ids.clone()
+    masked_inputs[0, token_index_in_seq] = tokenizer.mask_token_id
+
     with torch.no_grad():
-        outputs = model(**inputs)
+        outputs = model(input_ids=masked_inputs, attention_mask=inputs.attention_mask)
         logits = outputs.logits
 
     position_logits = logits[0, token_index_in_seq]
@@ -74,8 +78,12 @@ def predict_all(sequence: str, position: int, model_name: str):
     wildtype_id = inputs.input_ids[0, token_index_in_seq].item()
     wildtype_token = tokenizer.convert_ids_to_tokens(wildtype_id)
 
+    # Mask the target position before inference
+    masked_inputs = inputs.input_ids.clone()
+    masked_inputs[0, token_index_in_seq] = tokenizer.mask_token_id
+
     with torch.no_grad():
-        outputs = model(**inputs)
+        outputs = model(input_ids=masked_inputs, attention_mask=inputs.attention_mask)
         logits = outputs.logits
 
     position_logits = logits[0, token_index_in_seq]
@@ -116,10 +124,6 @@ def scan_sequence(sequence: str, model_name: str):
     tokenizer, model = load_esm_model(model_name)
     inputs = tokenizer(sequence, return_tensors="pt")
 
-    with torch.no_grad():
-        outputs = model(**inputs)
-        logits = outputs.logits  # shape: [1, seq_len+2, vocab_size]
-
     seq_len = len(sequence)
     positions = []
 
@@ -129,7 +133,14 @@ def scan_sequence(sequence: str, model_name: str):
         wildtype_id = inputs.input_ids[0, token_index].item()
         wildtype_token = tokenizer.convert_ids_to_tokens(wildtype_id)
 
-        position_logits = logits[0, token_index]
+        # Mask this position and run a fresh forward pass
+        masked_inputs = inputs.input_ids.clone()
+        masked_inputs[0, token_index] = tokenizer.mask_token_id
+
+        with torch.no_grad():
+            masked_outputs = model(input_ids=masked_inputs, attention_mask=inputs.attention_mask)
+
+        position_logits = masked_outputs.logits[0, token_index]
         log_probs = torch.nn.functional.log_softmax(position_logits, dim=0)
         wildtype_log_prob = log_probs[wildtype_id].item()
 
@@ -212,35 +223,22 @@ def run_tests():
             if name_match:
                 failure_blocks[name_match.group(1)] = block.strip()
 
-    # Split output into per-test chunks using PASSED/FAILED markers
-    # Build a map of test_name -> its captured stdout block
-    stdout_blocks = {}
-    # pytest -s prints stdout inline; capture everything between test headers
-    test_positions = [(m.start(), m.group(1), m.group(2), m.group(3))
-                      for m in test_line_re.finditer(output)]
-
-    for i, (pos, cls, tname, outcome_str) in enumerate(test_positions):
-        # Look backward from the PASSED/FAILED line to find printed output
-        start = test_positions[i-1][0] if i > 0 else 0
-        chunk = output[start:pos]
-        stdout_blocks[tname] = chunk.strip()
-
     for m in test_line_re.finditer(output):
         class_name = m.group(1)
         test_name  = m.group(2)
         outcome    = m.group(3).lower()
 
-        # Extract LLR score from captured stdout
-        chunk = stdout_blocks.get(test_name, "")
-        score_match = re.search(r"Score:\s*([-\d.]+)", chunk)
+        # Try to find LLR score printed by the test
+        score_match = re.search(
+            r"Score:\s*([-\d.]+).*?" + re.escape(test_name[:10]),
+            output
+        )
+        if not score_match:
+            score_match = re.search(
+                re.escape(test_name[:10]) + r".*?Score:\s*([-\d.]+)",
+                output, re.DOTALL
+            )
         stdout_score = score_match.group(1) if score_match else ""
-
-        # Build clean log lines for this test
-        log_lines = []
-        for line in chunk.splitlines():
-            line = line.strip()
-            if line and not line.startswith("PASSED") and not line.startswith("FAILED"):
-                log_lines.append(line)
 
         tests.append({
             "id": f"test_mutations.py::{class_name}::{test_name}",
@@ -249,8 +247,7 @@ def run_tests():
             "outcome": outcome,
             "duration": 0,
             "message": failure_blocks.get(test_name, ""),
-            "stdout": stdout_score,
-            "logs": "\n".join(log_lines)
+            "stdout": stdout_score
         })
 
     passed = sum(1 for t in tests if t["outcome"] == "passed")
